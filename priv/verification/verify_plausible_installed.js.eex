@@ -1,7 +1,7 @@
 export default async function({ page }) {
 
 	await page.setUserAgent(
-		"plausible.io Snippet Verification Agent - if abused contact support@plausible.io",
+		"<%= user_agent %>",
 	);
 
 	const resp = await page.goto("<%= url %>");

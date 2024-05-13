@@ -4,14 +4,14 @@ defmodule Plausible.Verification.Checks.Installation do
 
   @verification_script_filename "verification/verify_plausible_installed.js.eex"
   @verification_script_path Path.join(:code.priv_dir(:plausible), @verification_script_filename)
-  # TODO: external resource
 
   EEx.function_from_file(
     :def,
     :verify_plausible_installed_js_code,
     @verification_script_path,
     [
-      :url
+      :url,
+      :user_agent
     ]
   )
 
@@ -22,7 +22,7 @@ defmodule Plausible.Verification.Checks.Installation do
   def perform(%State{url: url} = state) do
     opts = [
       headers: %{content_type: "application/javascript"},
-      body: verify_plausible_installed_js_code(url),
+      body: verify_plausible_installed_js_code(url, Plausible.Verification.user_agent()),
       retry: :transient,
       retry_log_level: :warning,
       max_retries: 3

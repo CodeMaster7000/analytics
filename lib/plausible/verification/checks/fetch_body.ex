@@ -12,8 +12,7 @@ defmodule Plausible.Verification.Checks.FetchBody do
       Keyword.merge(
         [
           base_url: url,
-          max_redirects: 1,
-          connect_options: [transport_opts: [cacerts: :public_key.cacerts_get()]]
+          max_redirects: 1
         ],
         fetch_body_opts
       )
