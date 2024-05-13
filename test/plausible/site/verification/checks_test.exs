@@ -424,9 +424,12 @@ defmodule Plausible.Verification.ChecksTest do
       final_state = run_checks(report_to: self())
 
       assert_receive {:verification_check_start, {Checks.FetchBody, %State{}}}
+      assert_receive {:verification_check_start, {Checks.CSP, %State{}}}
       assert_receive {:verification_check_start, {Checks.Snippet, %State{}}}
+      assert_receive {:verification_check_start, {Checks.SnippetCacheBust, %State{}}}
       assert_receive {:verification_check_start, {Checks.Installation, %State{}}}
       assert_receive {:verification_end, %State{} = ^final_state}
+      refute_receive _
     end
   end
 
