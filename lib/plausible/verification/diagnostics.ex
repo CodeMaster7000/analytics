@@ -8,6 +8,7 @@ defmodule Plausible.Verification.Diagnostics do
             disallowed_via_csp?: false,
             service_error: nil,
             body_fetched?: false,
+            wordpress?: false,
             url: nil
 
   @type t :: %__MODULE__{}
@@ -99,6 +100,7 @@ defmodule Plausible.Verification.Diagnostics do
   def general_recommendations(%D{} = diag) do
     Enum.reduce(
       [
+        &recommend_wordpress_plugin/1,
         &recommend_one_snippet/1,
         &recommend_putting_snippet_in_head/1,
         &recommend_busting_cache/1
@@ -114,6 +116,12 @@ defmodule Plausible.Verification.Diagnostics do
         end
       end
     )
+  end
+
+  defp recommend_wordpress_plugin(diag) do
+    if diag.wordpress? do
+      "On WordPress? Use our official plugin"
+    end
   end
 
   defp recommend_one_snippet(diag) do

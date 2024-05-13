@@ -36,7 +36,7 @@ defmodule Plausible.Verification.Checks.FetchBody do
     case Floki.parse_document(response.body) do
       {:ok, document} ->
         state
-        |> assign(document: document, headers: response.headers)
+        |> assign(raw_body: response.body, document: document, headers: response.headers)
         |> put_diagnostics(body_fetched?: true)
 
       {:error, _reason} ->

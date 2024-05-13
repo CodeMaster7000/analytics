@@ -27,6 +27,7 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.body_fetched? == true
       refute result.diagnostics.service_error
       refute result.diagnostics.snippet_found_after_busting_cache?
+      assert result.diagnostics.wordpress? == false
 
       rating = State.interpret_diagnostics(result)
       assert rating.ok?
@@ -425,11 +426,60 @@ defmodule Plausible.Verification.ChecksTest do
 
       assert_receive {:verification_check_start, {Checks.FetchBody, %State{}}}
       assert_receive {:verification_check_start, {Checks.CSP, %State{}}}
+      assert_receive {:verification_check_start, {Checks.DetectApp, %State{}}}
       assert_receive {:verification_check_start, {Checks.Snippet, %State{}}}
       assert_receive {:verification_check_start, {Checks.SnippetCacheBust, %State{}}}
       assert_receive {:verification_check_start, {Checks.Installation, %State{}}}
       assert_receive {:verification_end, %State{} = ^final_state}
       refute_receive _
+    end
+
+    @wordpress_in_body """
+    <html>
+    <head>
+    <meta generator="WordPress"/>
+    </head>
+    <body>
+    Hello
+    </body>
+    </html>
+    """
+
+    test "detecting wordpress via body" do
+      stub_fetch_body(200, @wordpress_in_body)
+      stub_installation()
+
+      result = run_checks()
+
+      assert result.diagnostics.wordpress? == true
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == ["On WordPress? Use our official plugin"]
+    end
+
+    test "detecting wordpress via headers" do
+      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header(
+          Enum.random(["server", "x-powered-by"]),
+          "Something WordPress Something"
+        )
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(200, @normal_body)
+      end)
+
+      stub_installation()
+
+      result = run_checks()
+
+      assert result.diagnostics.wordpress? == true
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == ["On WordPress? Use our official plugin"]
     end
   end
 
