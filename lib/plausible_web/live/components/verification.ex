@@ -90,7 +90,9 @@ defmodule PlausibleWeb.Live.Components.Verification do
     ~H"""
     <p class="leading-normal">
       <span :for={recommendation <- @rating.recommendations}>
-        <%= recommendation %>
+        <span :if={is_binary(recommendation)}><%= recommendation %> </span>
+        <span :if={is_tuple(recommendation)}><%= elem(recommendation, 0) %> </span>
+        <.styled_link :if={is_tuple(recommendation)} href={elem(recommendation, 1)}>Learn more</.styled_link>
         <br />
       </span>
     </p>

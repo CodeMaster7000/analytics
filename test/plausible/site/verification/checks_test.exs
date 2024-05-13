@@ -273,7 +273,7 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.errors == []
 
       assert rating.recommendations == [
-               "Hint: Purge your site's cache to ensure you're viewing the lastes version of your webiste"
+               "Hint: Purge your site's cache to ensure you're viewing the lastes version of your website"
              ]
     end
 

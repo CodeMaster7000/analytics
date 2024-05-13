@@ -49,7 +49,7 @@ defmodule Plausible.Verification.Diagnostics do
   def rate(%D{plausible_installed?: false, body_fetched?: false}, url) do
     %Rating{
       ok?: false,
-      errors: ["We could not reach your webiste. Is it up?"],
+      errors: ["We could not reach your website. Is it up?"],
       recommendations: [
         "Make sure the website is up and running at #{url}",
         "Note: you can run the site elsewhere, in which case we can't verify it"
@@ -120,7 +120,7 @@ defmodule Plausible.Verification.Diagnostics do
 
   defp recommend_wordpress_plugin(diag) do
     if diag.wordpress? do
-      "On WordPress? Use our official plugin"
+      {"On WordPress? Use our official plugin", ""}
     end
   end
 
@@ -138,7 +138,7 @@ defmodule Plausible.Verification.Diagnostics do
 
   defp recommend_busting_cache(diag) do
     if diag.snippet_found_after_busting_cache? do
-      "Hint: Purge your site's cache to ensure you're viewing the lastes version of your webiste"
+      "Hint: Purge your site's cache to ensure you're viewing the latest version of your website"
     end
   end
 end
