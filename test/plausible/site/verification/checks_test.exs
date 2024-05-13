@@ -25,8 +25,9 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
-      refute result.diagnostics.could_not_fetch_body
+      assert result.diagnostics.body_fetched? == true
       refute result.diagnostics.service_error
+      refute result.diagnostics.snippet_found_after_busting_cache
     end
 
     test "service error - 400" do
@@ -39,8 +40,9 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == false
-      refute result.diagnostics.could_not_fetch_body
+      assert result.diagnostics.body_fetched? == true
       assert result.diagnostics.service_error == 400
+      refute result.diagnostics.snippet_found_after_busting_cache
     end
 
     @tag :slow
@@ -61,8 +63,11 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
-      assert result.diagnostics.could_not_fetch_body
+
+      assert result.diagnostics.body_fetched? == false
       refute result.diagnostics.service_error
+
+      refute result.diagnostics.snippet_found_after_busting_cache
     end
 
     test "fetching will follow 1 redirect" do
@@ -92,8 +97,9 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
-      refute result.diagnostics.could_not_fetch_body
+      assert result.diagnostics.body_fetched? == true
       refute result.diagnostics.service_error
+      refute result.diagnostics.snippet_found_after_busting_cache
     end
 
     test "fetching will not follow more than 1 redirect" do
@@ -111,8 +117,9 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
-      assert result.diagnostics.could_not_fetch_body == true
+      assert result.diagnostics.body_fetched? == false
       refute result.diagnostics.service_error
+      refute result.diagnostics.snippet_found_after_busting_cache
     end
 
     test "fetching body fails at non-2xx status" do
@@ -125,8 +132,9 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
-      assert result.diagnostics.could_not_fetch_body == true
+      refute result.diagnostics.body_fetched?
       refute result.diagnostics.service_error
+      refute result.diagnostics.snippet_found_after_busting_cache
     end
 
     @snippet_in_body """
@@ -148,6 +156,7 @@ defmodule Plausible.Verification.ChecksTest do
 
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 1
+      refute result.diagnostics.snippet_found_after_busting_cache
     end
 
     @many_snippets """
@@ -172,6 +181,49 @@ defmodule Plausible.Verification.ChecksTest do
 
       assert result.diagnostics.snippets_found_in_head == 2
       assert result.diagnostics.snippets_found_in_body == 2
+      refute result.diagnostics.snippet_found_after_busting_cache
+    end
+
+    @body_no_snippet """
+    <html>
+    <head>
+    </head>
+    <body>
+    Hello
+    </body>
+    </html>
+    """
+
+    test "detecting snippet after busting cache" do
+      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+
+        if conn.query_params["plausible_verification"] do
+          conn
+          |> Plug.Conn.send_resp(200, @normal_body)
+        else
+          Plug.Conn.send_resp(conn, 200, @body_no_snippet)
+        end
+      end)
+
+      Req.Test.stub(Plausible.Verification.Checks.Installation, fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+
+        if conn.query_params["plausible_verification"] do
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(200, Jason.encode!(%{"plausibleInstalled" => true}))
+        else
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(200, Jason.encode!(%{"plausibleInstalled" => false}))
+        end
+      end)
+
+      result = run_checks()
+      assert result.diagnostics.snippet_found_after_busting_cache == true
+      assert result.diagnostics.snippets_found_in_head == 1
+      assert result.diagnostics.snippets_found_in_body == 0
     end
 
     test "a check that raises" do
@@ -195,7 +247,8 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.plausible_installed? == false
       assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.service_error == nil
-      assert result.diagnostics.could_not_fetch_body == nil
+      assert result.diagnostics.body_fetched? == false
+      assert result.diagnostics.snippet_found_after_busting_cache == false
 
       assert log =~
                ~s|Error running check Faulty check on https://example.com: %RuntimeError{message: "boom"}|
@@ -222,7 +275,8 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.plausible_installed? == false
       assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.service_error == nil
-      assert result.diagnostics.could_not_fetch_body == nil
+      assert result.diagnostics.body_fetched? == false
+      assert result.diagnostics.snippet_found_after_busting_cache == false
 
       assert log =~
                ~s|Error running check Faulty check on https://example.com: :boom|

@@ -7,6 +7,7 @@ defmodule Plausible.Verification.Checks do
   @checks [
     Checks.FetchBody,
     Checks.Snippet,
+    Checks.SnippetCacheBust,
     Checks.Installation
   ]
 

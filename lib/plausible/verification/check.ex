@@ -5,12 +5,13 @@ defmodule Plausible.Verification.Check do
 
   defmacro __using__(_) do
     quote do
+      import Plausible.Verification.State
+
       alias Plausible.Verification.Checks
       alias Plausible.Verification.State
-      import Plausible.Verification.State
+      alias Plausible.Verification.Diagnostics
 
       @behaviour Plausible.Verification.Check
     end
   end
-
 end

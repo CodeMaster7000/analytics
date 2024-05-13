@@ -20,16 +20,16 @@ defmodule Plausible.Verification.Checks.FetchBody do
 
     req = Req.new(opts)
 
-    case Req.get(req) |> IO.inspect(label: :req) do
+    case Req.get(req) do
       {:ok, %{status: status, body: body} = response}
       when is_binary(body) and status in 200..299 ->
         extract_document(state, response)
 
       {:ok, _response} ->
-        put_diagnostics(state, could_not_fetch_body: true)
+        put_diagnostics(state, body_fetched?: false)
 
       {:error, _exception} ->
-        put_diagnostics(state, could_not_fetch_body: true)
+        put_diagnostics(state, body_fetched?: false)
     end
   end
 
@@ -38,10 +38,12 @@ defmodule Plausible.Verification.Checks.FetchBody do
 
     case Floki.parse_document(response.body) do
       {:ok, document} ->
-        assign(state, document: document)
+        state
+        |> assign(document: document)
+        |> put_diagnostics(body_fetched?: true)
 
-      {:error, reason} ->
-        put_diagnostics(state, could_not_parse_document: reason)
+      {:error, _reason} ->
+        put_diagnostics(state, body_fetched?: false)
     end
   end
 
