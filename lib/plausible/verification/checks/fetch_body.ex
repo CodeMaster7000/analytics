@@ -33,21 +33,14 @@ defmodule Plausible.Verification.Checks.FetchBody do
   end
 
   defp extract_document(state, response) do
-    state = check_content_type(state, response)
-
     case Floki.parse_document(response.body) do
       {:ok, document} ->
         state
-        |> assign(document: document)
+        |> assign(document: document, headers: response.headers)
         |> put_diagnostics(body_fetched?: true)
 
       {:error, _reason} ->
         put_diagnostics(state, body_fetched?: false)
     end
-  end
-
-  defp check_content_type(state, response) do
-    content_type = List.first(List.wrap(response.headers["content-type"]))
-    put_diagnostics(state, document_content_type: content_type || "")
   end
 end

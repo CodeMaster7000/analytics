@@ -5,7 +5,7 @@ defmodule Plausible.Verification.Diagnostics do
             snippets_found_in_body: 0,
             plausible_installed?: false,
             snippet_found_after_busting_cache?: false,
-            document_content_type: "",
+            disallowed_via_csp?: false,
             service_error: nil,
             body_fetched?: false,
             url: nil
@@ -20,8 +20,18 @@ defmodule Plausible.Verification.Diagnostics do
   end
 
   @spec rate(t(), String.t()) :: Rating.t()
-  def rate(%D{plausible_installed?: true} = diag, _url) do
+  def rate(%D{plausible_installed?: true, disallowed_via_csp?: false} = diag, _url) do
     %Rating{ok?: true, recommendations: general_recommendations(diag)}
+  end
+
+  def rate(%D{plausible_installed?: installed?, disallowed_via_csp?: true} = diag, _url) do
+    %Rating{
+      ok?: installed?,
+      recommendations: [
+        "Make sure your Content-Security-Policy allows plausible.io"
+        | general_recommendations(diag)
+      ]
+    }
   end
 
   def rate(%D{plausible_installed?: false, service_error: true}, _url) do

@@ -21,7 +21,6 @@ defmodule Plausible.Verification.ChecksTest do
 
       result = run_checks()
 
-      assert result.diagnostics.document_content_type == "text/html; charset=utf-8"
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
@@ -41,7 +40,6 @@ defmodule Plausible.Verification.ChecksTest do
 
       result = run_checks()
 
-      assert result.diagnostics.document_content_type == "text/html; charset=utf-8"
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == false
@@ -75,7 +73,6 @@ defmodule Plausible.Verification.ChecksTest do
       assert log =~ "2 attempts left"
       assert log =~ "1 attempt left"
 
-      assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
@@ -114,7 +111,6 @@ defmodule Plausible.Verification.ChecksTest do
       result = run_checks()
       assert_receive :redirect_sent
 
-      assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
@@ -139,7 +135,6 @@ defmodule Plausible.Verification.ChecksTest do
 
       result = run_checks()
 
-      assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
@@ -159,7 +154,6 @@ defmodule Plausible.Verification.ChecksTest do
 
       result = run_checks()
 
-      assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == true
@@ -318,7 +312,6 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == false
-      assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.service_error == true
       assert result.diagnostics.body_fetched? == false
       assert result.diagnostics.snippet_found_after_busting_cache? == false
@@ -356,7 +349,6 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == false
-      assert result.diagnostics.document_content_type == ""
       assert result.diagnostics.service_error == true
       assert result.diagnostics.body_fetched? == false
       assert result.diagnostics.snippet_found_after_busting_cache? == false
@@ -372,6 +364,57 @@ defmodule Plausible.Verification.ChecksTest do
                "Please try again in a few minutes",
                "Try visiting your website to help us register pageviews"
              ]
+    end
+
+    test "disallowed via content-security-policy" do
+      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("content-security-policy", "default-src 'self' foo.local")
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(200, @normal_body)
+      end)
+
+      installed? = Enum.random([true, false])
+      stub_installation(200, plausible_installed(installed?))
+
+      result = run_checks()
+
+      assert result.diagnostics.disallowed_via_csp? == true
+
+      rating = State.interpret_diagnostics(result)
+
+      assert rating.ok? == installed?
+      assert rating.errors == []
+
+      assert rating.recommendations == [
+               "Make sure your Content-Security-Policy allows plausible.io"
+             ]
+    end
+
+    test "allowed via content-security-policy" do
+      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header(
+          "content-security-policy",
+          Enum.random([
+            "default-src 'self'; script-src plausible.io; connect-src plausible.io",
+            "default-src 'self' *.plausible.io"
+          ])
+        )
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(200, @normal_body)
+      end)
+
+      stub_installation()
+      result = run_checks()
+
+      assert result.diagnostics.disallowed_via_csp? == false
+
+      rating = State.interpret_diagnostics(result)
+
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == []
     end
 
     test "running checks sends progress messages" do

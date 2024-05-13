@@ -11,8 +11,8 @@ defmodule Plausible.Verification.State do
     Plausible.Verification.Diagnostics.rate(state.diagnostics, state.url)
   end
 
-  def assign(%__MODULE__{} = state, [{key, value}]) do
-    %{state | assigns: Map.put(state.assigns, key, value)}
+  def assign(%__MODULE__{} = state, assigns) do
+    %{state | assigns: Map.merge(state.assigns, Enum.into(assigns, %{}))}
   end
 
   def put_diagnostics(%__MODULE__{} = state, diagnostics) when is_list(diagnostics) do

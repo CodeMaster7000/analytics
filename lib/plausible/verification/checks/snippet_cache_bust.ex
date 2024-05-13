@@ -16,7 +16,6 @@ defmodule Plausible.Verification.Checks.SnippetCacheBust do
           diagnostics: %Diagnostics{snippets_found_in_head: 0, snippets_found_in_body: 0}
         } = state
       ) do
-
     cache_invalidator = abs(:erlang.unique_integer())
     busted_url = update_url(url, cache_invalidator)
 
