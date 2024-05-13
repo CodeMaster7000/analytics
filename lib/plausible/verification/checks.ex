@@ -34,30 +34,10 @@ defmodule Plausible.Verification.Checks do
         fn check, state ->
           state
           |> State.notify_start(check, slowdown)
-          |> run_check(check)
+          |> check.perform_wrapped()
         end
       )
 
     State.notify_verification_end(state, slowdown)
-  end
-
-  defp run_check(state, check) do
-    try do
-      check.perform(state)
-    rescue
-      e ->
-        Logger.error(
-          "Error running check #{check.friendly_name()} on #{state.url}: #{inspect(e)}"
-        )
-
-        state
-    catch
-      e ->
-        Logger.error(
-          "Error running check #{check.friendly_name()} on #{state.url}: #{inspect(e)}"
-        )
-
-        state
-    end
   end
 end

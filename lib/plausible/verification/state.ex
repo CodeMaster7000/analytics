@@ -7,6 +7,10 @@ defmodule Plausible.Verification.State do
 
   @type t() :: %__MODULE__{}
 
+  def interpret_diagnostics(%__MODULE__{} = state) do
+    Plausible.Verification.Diagnostics.rate(state.diagnostics, state.url)
+  end
+
   def assign(%__MODULE__{} = state, [{key, value}]) do
     %{state | assigns: Map.put(state.assigns, key, value)}
   end

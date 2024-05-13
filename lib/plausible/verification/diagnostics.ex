@@ -4,7 +4,7 @@ defmodule Plausible.Verification.Diagnostics do
   defstruct snippets_found_in_head: 0,
             snippets_found_in_body: 0,
             plausible_installed?: false,
-            snippet_found_after_busting_cache: false,
+            snippet_found_after_busting_cache?: false,
             document_content_type: "",
             service_error: nil,
             body_fetched?: false,
@@ -12,57 +12,115 @@ defmodule Plausible.Verification.Diagnostics do
 
   @type t :: %__MODULE__{}
 
-  defmodule Interpretation do
-    defstruct confidence: 0, errors: [], recommendations: []
+  alias __MODULE__, as: D
+
+  defmodule Rating do
+    defstruct ok?: false, errors: [], recommendations: []
     @type t :: %__MODULE__{}
   end
 
-  # @spec interpret(t()) :: Interpretation.t()
-  # def interpret(%__MODULE__{} = diagnostics) do
-  #   case diagnostics do
-  #     %__MODULE__{
-  #       plausible_installed?: true,
-  #       could_not_fetch_body: false,
-  #       snippets_found_in_head: 1
-  #     } ->
-  #       %Interpretation{confidence: 100, errors: [], recommendations: []}
-
-  #     %__MODULE__{could_not_fetch_body: true, plausible_installed?: false, url: url} ->
-  #       %Interpretation{
-  #         confidence: 100,
-  #         errors: ["We could not reach your website. Is it up?"],
-  #         recommendations: [
-  #           "Make sure your website is publicly available at #{url}. Note that the integration may still work if your website is hosted under a different address."
-  #         ]
-  #       }
-  #   end
-  # end
-
-  def diagnostics_to_user_feedback(%__MODULE__{body_fetched?: false, service_error: e2})
-      when not is_nil(e2) do
-    {:error, "We could not reach your website. Is it up?"}
+  @spec rate(t(), String.t()) :: Rating.t()
+  def rate(%D{plausible_installed?: true} = diag, _url) do
+    %Rating{ok?: true, recommendations: general_recommendations(diag)}
   end
 
-  def diagnostics_to_user_feedback(%__MODULE__{body_fetched?: true, service_error: e})
-      when not is_nil(e) do
-    Logger.error("Verification Agent error: #{inspect(e)}")
-    {:error, "Your website is up but we are unable to verify it. Please try again later."}
+  def rate(%D{plausible_installed?: false, service_error: true}, _url) do
+    %Rating{
+      ok?: false,
+      errors: ["We encountered a temporary problem verifying your website"],
+      recommendations: [
+        "Please try again in a few minutes",
+        "Try visiting your website to help us register pageviews"
+      ]
+    }
   end
 
-  def diagnostics_to_user_feedback(%__MODULE__{service_error: e}) when not is_nil(e) do
-    Logger.error("Verification Agent error: #{inspect(e)}")
-    {:error, "We are currently unable to verify your site. Please try again later."}
+  def rate(%D{plausible_installed?: false, body_fetched?: false}, url) do
+    %Rating{
+      ok?: false,
+      errors: ["We could not reach your webiste. Is it up?"],
+      recommendations: [
+        "Make sure the website is up and running at #{url}",
+        "Note: you can run the site elsewhere, in which case we can't verify it"
+      ]
+    }
   end
 
-  def diagnostics_to_user_feedback(%__MODULE__{
-        snippets_found_in_head: 0,
-        snippets_found_in_body: 0,
-        plausible_installed?: false
-      }) do
-    {:error, "We could not find the Plausible snippet on your website"}
+  def rate(
+        %D{body_fetched?: true, plausible_installed?: false, service_error: service_error},
+        _url
+      )
+      when not is_nil(service_error) do
+    %Rating{
+      ok?: false,
+      errors: ["Your website is up, but we couldn't verify it"],
+      recommendations: [
+        "Please try again in a few minutes",
+        "Try visiting your website to help us register pageviews"
+      ]
+    }
   end
 
-  def diagnostics_to_user_feedback(%__MODULE__{plausible_installed?: false}) do
-    {:error, "We could not verify your Plausible snippet working"}
+  def rate(
+        %D{
+          body_fetched?: true,
+          plausible_installed?: false,
+          snippets_found_in_body: 0,
+          snippets_found_in_head: 0,
+          service_error: nil
+        },
+        _url
+      ) do
+    %Rating{
+      ok?: false,
+      errors: ["We found no snippet installed on your website"],
+      recommendations: ["Hint: Place the snippet on your website and deploy it"]
+    }
+  end
+
+  def rate(%D{plausible_installed?: false} = diag, _url) do
+    %Rating{
+      ok?: true,
+      errors: ["We could not verify your installation"],
+      recommendations: general_recommendations(diag)
+    }
+  end
+
+  def general_recommendations(%D{} = diag) do
+    Enum.reduce(
+      [
+        &recommend_one_snippet/1,
+        &recommend_putting_snippet_in_head/1,
+        &recommend_busting_cache/1
+      ],
+      [],
+      fn f, acc ->
+        recommendation = f.(diag)
+
+        if recommendation do
+          [recommendation | acc]
+        else
+          acc
+        end
+      end
+    )
+  end
+
+  defp recommend_one_snippet(diag) do
+    if diag.snippets_found_in_body > 1 or diag.snippets_found_in_head > 1 do
+      "Hint: Multiple snippets found on your website. Was that intentional?"
+    end
+  end
+
+  defp recommend_putting_snippet_in_head(diag) do
+    if diag.snippets_found_in_body > 0 do
+      "Hint: Place the snippet in <head> rather than <body>"
+    end
+  end
+
+  defp recommend_busting_cache(diag) do
+    if diag.snippet_found_after_busting_cache? do
+      "Hint: Purge your site's cache to ensure you're viewing the lastes version of your webiste"
+    end
   end
 end

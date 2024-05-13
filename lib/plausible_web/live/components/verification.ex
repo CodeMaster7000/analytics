@@ -12,7 +12,7 @@ defmodule PlausibleWeb.Live.Components.Verification do
         message: assigns[:message] || "Verifying your installation",
         finished?: assigns[:finished?] || false,
         success?: assigns[:success?] || false,
-        diagnostics: assigns[:diagnostics]
+        rating: assigns[:rating]
       )
 
     {:ok, socket}
@@ -25,7 +25,7 @@ defmodule PlausibleWeb.Live.Components.Verification do
       if(!@modal?, do: "shadow-md rounded px-8 pt-6 pb-4 mb-4 mt-16")
     ]}>
       <h2 class="text-xl font-bold dark:text-gray-100">Verifying your installation</h2>
-      <h2 class="text-xl font-bold dark:text-gray-100">on <%= @domain %></h2>
+      <h2 class="text-xl font-bold dark:text-gray-100 text-xs">on <%= @domain %></h2>
       <div :if={!@finished? || @success?} class="flex justify-center w-full h-12 mt-8">
         <div class={["block pulsating-circle", if(@modal? && @finished?, do: "hidden")]}></div>
         <Heroicons.check_circle
@@ -42,18 +42,19 @@ defmodule PlausibleWeb.Live.Components.Verification do
         id="progress"
         class={[
           "mt-2",
-          if(@finished? == false, do: "animate-pulse text-xs", else: "font-bold text-sm")
+          if(!@finished?, do: "animate-pulse text-xs", else: "font-bold text-sm"),
+          if(@finished? && !@success?, do: "text-red-500")
         ]}
       >
         <%= @message %>
       </div>
 
       <div :if={@finished?}>
-        <div :if={!@success? && @diagnostics} class="text-xs mt-4">
-          <.diagnostics_feedback diagnostics={@diagnostics} />
+        <div :if={@rating} class="text-xs mt-4">
+          <.recommendations rating={@rating} />
         </div>
 
-        <div class="flex justify-center gap-x-4 mt-6">
+        <div class="flex justify-center gap-x-4 mt-4">
           <.button_link :if={!@success?} href="#" phx-click="retry" class="text-xs">
             Retry
           </.button_link>
@@ -85,20 +86,14 @@ defmodule PlausibleWeb.Live.Components.Verification do
     """
   end
 
-  def diagnostics_feedback(assigns) do
-    {:error, error} =
-      Plausible.Verification.Diagnostics.diagnostics_to_user_feedback(assigns.diagnostics)
-
-    assigns = assign(assigns, :error, error)
-
+  def recommendations(assigns) do
     ~H"""
-    <ul class="mt-2 leading-6">
-      <li>
-        <span class="text-red-500">
-          <%= @error %>
-        </span>
-      </li>
-    </ul>
+    <p class="leading-normal">
+      <span :for={recommendation <- @rating.recommendations}>
+        <%= recommendation %>
+        <br />
+      </span>
+    </p>
     """
   end
 end

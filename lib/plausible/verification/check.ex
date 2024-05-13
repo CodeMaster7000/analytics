@@ -11,7 +11,25 @@ defmodule Plausible.Verification.Check do
       alias Plausible.Verification.State
       alias Plausible.Verification.Diagnostics
 
+      require Logger
+
       @behaviour Plausible.Verification.Check
+
+      def perform_wrapped(state) do
+        try do
+          perform(state)
+        rescue
+          e ->
+            Logger.error("Error running check #{friendly_name()} on #{state.url}: #{inspect(e)}")
+
+            put_diagnostics(state, service_error: true)
+        catch
+          e ->
+            Logger.error("Error running check #{friendly_name()} on #{state.url}: #{inspect(e)}")
+
+            put_diagnostics(state, service_error: true)
+        end
+      end
     end
   end
 end

@@ -2,7 +2,7 @@ defmodule PlausibleWeb.Live.Verification do
   use PlausibleWeb, :live_view
   use Phoenix.HTML
 
-  alias Plausible.Verification.{Checks, State, Diagnostics}
+  alias Plausible.Verification.{Checks, State}
   alias PlausibleWeb.Live.Components.Modal
 
   @component PlausibleWeb.Live.Components.Verification
@@ -109,34 +109,29 @@ defmodule PlausibleWeb.Live.Verification do
   def handle_info(
         {:verification_end,
          %State{
-           data_domain: data_domain,
-           diagnostics:
-             %Diagnostics{
-               plausible_installed?: plausible_installed?,
-               service_error: service_error
-             } = diagnostics
-         }},
+           data_domain: _data_domain
+         } = state},
         socket
       ) do
-    success? = !service_error && plausible_installed?
+    rating = State.interpret_diagnostics(state)
 
     message =
       cond do
-        success? and socket.assigns.modal? ->
-          "Everything looks good!"
+        rating.ok? and socket.assigns.modal? ->
+          "Installation verified"
 
-        success? ->
-          "Everything looks good. Awaiting your first pageview"
+        rating.ok? ->
+          "Installation verified. Awaiting your first pageview"
 
         true ->
-          "Verification failed for https://#{data_domain}"
+          List.first(rating.errors)
       end
 
     update_component(socket,
       message: message,
       finished?: true,
-      success?: success?,
-      diagnostics: diagnostics
+      success?: rating.ok?,
+      rating: rating
     )
 
     {:noreply, socket}

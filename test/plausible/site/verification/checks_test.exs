@@ -17,7 +17,7 @@ defmodule Plausible.Verification.ChecksTest do
   describe "running checks" do
     test "success" do
       stub_fetch_body(200, @normal_body)
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       result = run_checks()
 
@@ -27,7 +27,12 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.plausible_installed? == true
       assert result.diagnostics.body_fetched? == true
       refute result.diagnostics.service_error
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == []
     end
 
     test "service error - 400" do
@@ -42,13 +47,24 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.plausible_installed? == false
       assert result.diagnostics.body_fetched? == true
       assert result.diagnostics.service_error == 400
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+
+      refute rating.ok?
+
+      assert rating.errors == ["Your website is up, but we couldn't verify it"]
+
+      assert rating.recommendations == [
+               "Please try again in a few minutes",
+               "Try visiting your website to help us register pageviews"
+             ]
     end
 
     @tag :slow
     test "can't fetch body but headless reports ok" do
       stub_fetch_body(500, "")
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       {result, log} =
         with_log(fn ->
@@ -67,7 +83,12 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.body_fetched? == false
       refute result.diagnostics.service_error
 
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == []
     end
 
     test "fetching will follow 1 redirect" do
@@ -88,7 +109,7 @@ defmodule Plausible.Verification.ChecksTest do
         end
       end)
 
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       result = run_checks()
       assert_receive :redirect_sent
@@ -99,7 +120,12 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.plausible_installed? == true
       assert result.diagnostics.body_fetched? == true
       refute result.diagnostics.service_error
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == []
     end
 
     test "fetching will not follow more than 1 redirect" do
@@ -109,7 +135,7 @@ defmodule Plausible.Verification.ChecksTest do
         |> Plug.Conn.send_resp(302, "redirecting to https://example.com")
       end)
 
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       result = run_checks()
 
@@ -119,12 +145,17 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.plausible_installed? == true
       assert result.diagnostics.body_fetched? == false
       refute result.diagnostics.service_error
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == []
     end
 
     test "fetching body fails at non-2xx status" do
       stub_fetch_body(599, "boo")
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       result = run_checks()
 
@@ -134,7 +165,12 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.plausible_installed? == true
       refute result.diagnostics.body_fetched?
       refute result.diagnostics.service_error
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == []
     end
 
     @snippet_in_body """
@@ -148,15 +184,20 @@ defmodule Plausible.Verification.ChecksTest do
     </html>
     """
 
-    test "detecting snippet in head" do
+    test "detecting snippet in body" do
       stub_fetch_body(200, @snippet_in_body)
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       result = run_checks()
 
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 1
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == ["Hint: Place the snippet in <head> rather than <body>"]
     end
 
     @many_snippets """
@@ -175,13 +216,22 @@ defmodule Plausible.Verification.ChecksTest do
 
     test "detecting many snippets" do
       stub_fetch_body(200, @many_snippets)
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       result = run_checks()
 
       assert result.diagnostics.snippets_found_in_head == 2
       assert result.diagnostics.snippets_found_in_body == 2
-      refute result.diagnostics.snippet_found_after_busting_cache
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+
+      assert rating.recommendations == [
+               "Hint: Place the snippet in <head> rather than <body>",
+               "Hint: Multiple snippets found on your website. Was that intentional?"
+             ]
     end
 
     @body_no_snippet """
@@ -199,31 +249,54 @@ defmodule Plausible.Verification.ChecksTest do
         conn = Plug.Conn.fetch_query_params(conn)
 
         if conn.query_params["plausible_verification"] do
-          conn
-          |> Plug.Conn.send_resp(200, @normal_body)
+          Plug.Conn.send_resp(conn, 200, @normal_body)
         else
           Plug.Conn.send_resp(conn, 200, @body_no_snippet)
         end
       end)
 
       Req.Test.stub(Plausible.Verification.Checks.Installation, fn conn ->
-        conn = Plug.Conn.fetch_query_params(conn)
+        {:ok, body, _} = Plug.Conn.read_body(conn)
 
-        if conn.query_params["plausible_verification"] do
+        if String.contains?(body, "?plausible_verification") do
           conn
           |> Plug.Conn.put_resp_content_type("application/json")
-          |> Plug.Conn.send_resp(200, Jason.encode!(%{"plausibleInstalled" => true}))
+          |> Plug.Conn.send_resp(200, Jason.encode!(plausible_installed()))
         else
-          conn
-          |> Plug.Conn.put_resp_content_type("application/json")
-          |> Plug.Conn.send_resp(200, Jason.encode!(%{"plausibleInstalled" => false}))
+          raise "Should not get here even"
         end
       end)
 
       result = run_checks()
-      assert result.diagnostics.snippet_found_after_busting_cache == true
+
+      assert result.diagnostics.snippet_found_after_busting_cache? == true
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+
+      assert rating.recommendations == [
+               "Hint: Purge your site's cache to ensure you're viewing the lastes version of your webiste"
+             ]
+    end
+
+    test "detecting no snippet" do
+      stub_fetch_body(200, @body_no_snippet)
+      stub_installation(200, plausible_installed(false))
+
+      result = run_checks()
+
+      assert result.diagnostics.snippets_found_in_head == 0
+      assert result.diagnostics.snippets_found_in_body == 0
+      refute result.diagnostics.snippet_found_after_busting_cache?
+
+      rating = State.interpret_diagnostics(result)
+
+      refute rating.ok?
+      assert rating.errors == ["We found no snippet installed on your website"]
+      assert rating.recommendations == ["Hint: Place the snippet on your website and deploy it"]
     end
 
     test "a check that raises" do
@@ -246,12 +319,22 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == false
       assert result.diagnostics.document_content_type == ""
-      assert result.diagnostics.service_error == nil
+      assert result.diagnostics.service_error == true
       assert result.diagnostics.body_fetched? == false
-      assert result.diagnostics.snippet_found_after_busting_cache == false
+      assert result.diagnostics.snippet_found_after_busting_cache? == false
 
       assert log =~
                ~s|Error running check Faulty check on https://example.com: %RuntimeError{message: "boom"}|
+
+      rating = State.interpret_diagnostics(result)
+
+      refute rating.ok?
+      assert rating.errors == ["We encountered a temporary problem verifying your website"]
+
+      assert rating.recommendations == [
+               "Please try again in a few minutes",
+               "Try visiting your website to help us register pageviews"
+             ]
     end
 
     test "a check that throws" do
@@ -274,17 +357,26 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.snippets_found_in_body == 0
       assert result.diagnostics.plausible_installed? == false
       assert result.diagnostics.document_content_type == ""
-      assert result.diagnostics.service_error == nil
+      assert result.diagnostics.service_error == true
       assert result.diagnostics.body_fetched? == false
-      assert result.diagnostics.snippet_found_after_busting_cache == false
+      assert result.diagnostics.snippet_found_after_busting_cache? == false
 
       assert log =~
                ~s|Error running check Faulty check on https://example.com: :boom|
+
+      rating = State.interpret_diagnostics(result)
+      refute rating.ok?
+      assert rating.errors == ["We encountered a temporary problem verifying your website"]
+
+      assert rating.recommendations == [
+               "Please try again in a few minutes",
+               "Try visiting your website to help us register pageviews"
+             ]
     end
 
     test "running checks sends progress messages" do
       stub_fetch_body(200, @normal_body)
-      stub_installation(200, %{"data" => %{"plausibleInstalled" => true}})
+      stub_installation()
 
       final_state = run_checks(report_to: self())
 
@@ -311,11 +403,15 @@ defmodule Plausible.Verification.ChecksTest do
     end)
   end
 
-  defp stub_installation(status, json) do
+  defp stub_installation(status \\ 200, json \\ plausible_installed()) do
     Req.Test.stub(Plausible.Verification.Checks.Installation, fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.send_resp(status, Jason.encode!(json))
     end)
+  end
+
+  defp plausible_installed(bool \\ true) do
+    %{"data" => %{"plausibleInstalled" => bool}}
   end
 end

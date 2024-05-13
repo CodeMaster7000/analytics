@@ -2,7 +2,7 @@ defmodule Plausible.Verification.Checks.SnippetCacheBust do
   use Plausible.Verification.Check
 
   @impl true
-  def friendly_name, do: "Fetching website contents"
+  def friendly_name, do: "Busting cache"
 
   @impl true
   def perform(%State{diagnostics: %Diagnostics{} = diagnostics} = state)
@@ -16,6 +16,7 @@ defmodule Plausible.Verification.Checks.SnippetCacheBust do
           diagnostics: %Diagnostics{snippets_found_in_head: 0, snippets_found_in_body: 0}
         } = state
       ) do
+
     cache_invalidator = abs(:erlang.unique_integer())
     busted_url = update_url(url, cache_invalidator)
 
@@ -26,7 +27,7 @@ defmodule Plausible.Verification.Checks.SnippetCacheBust do
 
     if state2.diagnostics.snippets_found_in_head > 0 or
          state2.diagnostics.snippets_found_in_body > 0 do
-      put_diagnostics(state2, snippet_found_after_busting_cache: true)
+      put_diagnostics(state2, snippet_found_after_busting_cache?: true)
     else
       state
     end
