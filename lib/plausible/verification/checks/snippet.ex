@@ -11,9 +11,16 @@ defmodule Plausible.Verification.Checks.Snippet do
 
     put_diagnostics(state,
       snippets_found_in_head: Enum.count(result_head),
-      snippets_found_in_body: Enum.count(result_body)
+      snippets_found_in_body: Enum.count(result_body),
+      proxy_likely?: proxy_likely?(result_head ++ result_body)
     )
   end
 
   def perform(state), do: state
+
+  defp proxy_likely?(nodes) do
+    nodes
+    |> Floki.attribute("src")
+    |> Enum.any?(&(not String.starts_with?(&1, "https://plausible.io")))
+  end
 end

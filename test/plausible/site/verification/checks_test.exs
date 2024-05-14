@@ -28,6 +28,8 @@ defmodule Plausible.Verification.ChecksTest do
       refute result.diagnostics.service_error
       refute result.diagnostics.snippet_found_after_busting_cache?
       assert result.diagnostics.scan_findings == []
+      assert result.diagnostics.callback_status == 202
+      refute result.diagnostics.proxy_likely?
 
       rating = State.interpret_diagnostics(result)
       assert rating.ok?
@@ -515,9 +517,91 @@ defmodule Plausible.Verification.ChecksTest do
 
       assert rating.recommendations == [
                "Make sure the website is up and running at https://example.com",
-               {"Note: you can run the site elsewhere, in which case we can't verify it",
+               {"Note: if you host elsewhere, we can't verify it",
                 "https://plausible.io/docs/subdomain-hostname-filter"}
              ]
+    end
+
+    @proxied_script_body """
+    <html>
+    <head>
+    <script defer data-domain=\"example.com\" src=\"https://proxy.example.com/js/script.js\"></script>
+    </head>
+    <body>Hello</body>
+    </html>
+    """
+
+    test "proxied setup working OK" do
+      stub_fetch_body(200, @proxied_script_body)
+      stub_installation()
+
+      result = run_checks()
+
+      assert result.diagnostics.callback_status == 202
+      assert result.diagnostics.proxy_likely? == true
+
+      rating = State.interpret_diagnostics(result)
+      assert rating.ok?
+      assert rating.errors == []
+
+      assert rating.recommendations == [
+               {"Using a proxy? Read our guide", "https://plausible.io/docs/proxy/introduction"}
+             ]
+    end
+
+    test "proxied setup, function defined but callback won't fire" do
+      stub_fetch_body(200, @proxied_script_body)
+      stub_installation(200, plausible_installed(true, 0))
+
+      result = run_checks()
+
+      assert result.diagnostics.callback_status == 0
+      assert result.diagnostics.proxy_likely? == true
+
+      rating = State.interpret_diagnostics(result)
+      refute rating.ok?
+      assert rating.errors == ["Installation incomplete"]
+
+      assert rating.recommendations ==
+               [
+                 "In case of proxies, don't forget to setup the /event route",
+                 {"Using a proxy? Read our guide", "https://plausible.io/docs/proxy/introduction"}
+               ]
+    end
+
+    test "proxied setup, function undefined, callback won't fire" do
+      stub_fetch_body(200, @proxied_script_body)
+      stub_installation(200, plausible_installed(false, 0))
+
+      result = run_checks()
+
+      assert result.diagnostics.callback_status == 0
+      assert result.diagnostics.proxy_likely? == true
+
+      rating = State.interpret_diagnostics(result)
+      refute rating.ok?
+      assert rating.errors == ["We could not verify your installation"]
+
+      assert rating.recommendations ==
+               [
+                 {"Have you seen our troubleshooting guide?",
+                  "https://plausible.io/docs/troubleshoot-integration"},
+                 {"Using a proxy? Read our guide", "https://plausible.io/docs/proxy/introduction"}
+               ]
+    end
+
+    test "callback fails to fire" do
+      stub_fetch_body(200, @normal_body)
+      stub_installation(200, plausible_installed(true, 0))
+
+      result = run_checks()
+
+      assert result.diagnostics.callback_status == 0
+
+      rating = State.interpret_diagnostics(result)
+      refute rating.ok?
+      assert rating.errors == ["You're almost there"]
+      assert rating.recommendations == [""]
     end
   end
 
@@ -545,7 +629,7 @@ defmodule Plausible.Verification.ChecksTest do
     end)
   end
 
-  defp plausible_installed(bool \\ true) do
-    %{"data" => %{"plausibleInstalled" => bool}}
+  defp plausible_installed(bool \\ true, callback_status \\ 202) do
+    %{"data" => %{"plausibleInstalled" => bool, "callbackStatus" => callback_status}}
   end
 end

@@ -1,18 +1,39 @@
 export default async function({ page }) {
+	<%= if Mix.env() == :dev do %>
+	page.on('console', (msg) => console[msg.type()]('PAGE LOG:', msg.text()));
+	<% end %>
 
 	await page.setUserAgent(
 		"<%= user_agent %>",
 	);
 
-	const resp = await page.goto("<%= url %>");
+	await page.goto("<%= url %>");
 	await page.waitForNetworkIdle({ idleTime: 1000 });
-	const url = await page.title();
-	const plausibleInstalled = await page.evaluate(() => typeof (window.plausible) === "function");
+
+	const plausibleInstalled = await page.evaluate(() => {
+		if (typeof (window.plausible) === "function") {
+			window.plausible('verification-agent-test', {callback: function(options) {
+				window.plausibleCallbackResult = () => options && options.status ? options.status : 1; 
+			} });
+			return true;
+		} else {
+			return false;
+		}
+	});
+
+	await page.waitForFunction('window.plausibleCallbackResult');
+	const callbackStatus = await page.evaluate(() => {
+		if (typeof(window.plausibleCallbackResult) === "function") { 
+			return window.plausibleCallbackResult();
+		} else {
+			return 0;
+		}
+	});
+
 	return {
 		data: {
-			url, plausibleInstalled, resp
+			plausibleInstalled, callbackStatus
 		},
-		// Make sure to match the appropriate content here
-		type: "application/json",
+		type: "application/json"
 	};
 }

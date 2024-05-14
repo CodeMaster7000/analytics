@@ -33,9 +33,15 @@ defmodule Plausible.Verification.Checks.Installation do
     opts = Keyword.merge(opts, extra_opts)
 
     case Req.post(verification_endpoint(), opts) do
-      {:ok, %{status: 200, body: %{"data" => %{"plausibleInstalled" => installed?}}}}
+      {:ok,
+       %{
+         status: 200,
+         body: %{
+           "data" => %{"plausibleInstalled" => installed?, "callbackStatus" => callback_status}
+         }
+       }}
       when is_boolean(installed?) ->
-        put_diagnostics(state, plausible_installed?: installed?)
+        put_diagnostics(state, plausible_installed?: installed?, callback_status: callback_status)
 
       {:ok, %{status: status}} ->
         put_diagnostics(state, plausible_installed?: false, service_error: status)

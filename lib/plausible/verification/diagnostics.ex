@@ -8,11 +8,11 @@ defmodule Plausible.Verification.Diagnostics do
             disallowed_via_csp?: false,
             service_error: nil,
             body_fetched?: false,
-            scan_findings: []
+            scan_findings: [],
+            callback_status: -1,
+            proxy_likely?: false
 
   @type t :: %__MODULE__{}
-
-  alias __MODULE__, as: D
 
   defmodule Rating do
     defstruct ok?: false, errors: [], recommendations: []
@@ -20,11 +20,27 @@ defmodule Plausible.Verification.Diagnostics do
   end
 
   @spec rate(t(), String.t()) :: Rating.t()
-  def rate(%D{plausible_installed?: true, disallowed_via_csp?: false} = diag, _url) do
+  def rate(
+        %__MODULE__{proxy_likely?: true, plausible_installed?: true, callback_status: non_202} =
+          diag,
+        _url
+      )
+      when non_202 != 202 do
+    %Rating{
+      ok?: false,
+      errors: ["Installation incomplete"],
+      recommendations: [
+        "In case of proxies, don't forget to setup the /event route"
+        | general_recommendations(diag)
+      ]
+    }
+  end
+
+  def rate(%__MODULE__{plausible_installed?: true, disallowed_via_csp?: false} = diag, _url) do
     %Rating{ok?: true, recommendations: general_recommendations(diag)}
   end
 
-  def rate(%D{plausible_installed?: installed?, disallowed_via_csp?: true} = diag, _url) do
+  def rate(%__MODULE__{plausible_installed?: installed?, disallowed_via_csp?: true} = diag, _url) do
     %Rating{
       ok?: installed?,
       recommendations: [
@@ -35,7 +51,7 @@ defmodule Plausible.Verification.Diagnostics do
     }
   end
 
-  def rate(%D{plausible_installed?: false, service_error: true}, _url) do
+  def rate(%__MODULE__{plausible_installed?: false, service_error: true}, _url) do
     %Rating{
       ok?: false,
       errors: ["We encountered a temporary problem verifying your website"],
@@ -46,20 +62,24 @@ defmodule Plausible.Verification.Diagnostics do
     }
   end
 
-  def rate(%D{plausible_installed?: false, body_fetched?: false}, url) do
+  def rate(%__MODULE__{plausible_installed?: false, body_fetched?: false}, url) do
     %Rating{
       ok?: false,
       errors: ["We could not reach your website. Is it up?"],
       recommendations: [
         "Make sure the website is up and running at #{url}",
-        {"Note: you can run the site elsewhere, in which case we can't verify it",
+        {"Note: if you host elsewhere, we can't verify it",
          "https://plausible.io/docs/subdomain-hostname-filter"}
       ]
     }
   end
 
   def rate(
-        %D{body_fetched?: true, plausible_installed?: false, service_error: service_error},
+        %__MODULE__{
+          body_fetched?: true,
+          plausible_installed?: false,
+          service_error: service_error
+        },
         _url
       )
       when not is_nil(service_error) do
@@ -74,7 +94,7 @@ defmodule Plausible.Verification.Diagnostics do
   end
 
   def rate(
-        %D{
+        %__MODULE__{
           body_fetched?: true,
           plausible_installed?: false,
           snippets_found_in_body: 0,
@@ -93,17 +113,23 @@ defmodule Plausible.Verification.Diagnostics do
     }
   end
 
-  def rate(%D{plausible_installed?: false} = diag, _url) do
+  # TODO: test this
+  def rate(%__MODULE__{plausible_installed?: false} = diag, _url) do
     %Rating{
-      ok?: true,
+      ok?: false,
       errors: ["We could not verify your installation"],
-      recommendations: general_recommendations(diag)
+      recommendations: [
+        {"Have you seen our troubleshooting guide?",
+         "https://plausible.io/docs/troubleshoot-integration"}
+        | general_recommendations(diag)
+      ]
     }
   end
 
-  def general_recommendations(%D{} = diag) do
+  def general_recommendations(%__MODULE__{} = diag) do
     Enum.reduce(
       [
+        &recommend_proxy_guide/1,
         &recommend_gtm_docs/1,
         &recommend_one_snippet/1,
         &recommend_putting_snippet_in_head/1,
@@ -120,6 +146,12 @@ defmodule Plausible.Verification.Diagnostics do
         end
       end
     )
+  end
+
+  defp recommend_proxy_guide(diag) do
+    if diag.proxy_likely? do
+      {"Using a proxy? Read our guide", "https://plausible.io/docs/proxy/introduction"}
+    end
   end
 
   defp recommend_gtm_docs(diag) do

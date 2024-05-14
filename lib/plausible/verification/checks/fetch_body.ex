@@ -33,11 +33,12 @@ defmodule Plausible.Verification.Checks.FetchBody do
 
   defp extract_document(state, response) when byte_size(response.body) <= 500_000 do
     with true <- html?(response),
-          {:ok, document} <- Floki.parse_document(response.body) do
+         {:ok, document} <- Floki.parse_document(response.body) do
       state
       |> assign(raw_body: response.body, document: document, headers: response.headers)
       |> put_diagnostics(body_fetched?: true)
-    else _ -> 
+    else
+      _ ->
         state
     end
   end
