@@ -135,7 +135,7 @@ defmodule Plausible.Verification.ChecksTest do
     test "fetching will not follow more than 2 redirect" do
       test = self()
 
-      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+      stub_fetch_body(fn conn ->
         send(test, :redirect_sent)
 
         conn
@@ -225,6 +225,8 @@ defmodule Plausible.Verification.ChecksTest do
     Hello
     <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
     <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
+    <!-- maybe proxy? -->
+    <script defer data-domain="example.com" src="https://example.com/js/script.js"></script>
     </body>
     </html>
     """
@@ -236,7 +238,8 @@ defmodule Plausible.Verification.ChecksTest do
       result = run_checks()
 
       assert result.diagnostics.snippets_found_in_head == 2
-      assert result.diagnostics.snippets_found_in_body == 2
+      assert result.diagnostics.snippets_found_in_body == 3
+      assert result.diagnostics.proxy_likely? == true
       refute result.diagnostics.snippet_found_after_busting_cache?
 
       rating = State.interpret_diagnostics(result)
@@ -246,7 +249,8 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.recommendations == [
                "Hint: Place the snippet in <head> rather than <body>",
                {"Hint: Multiple snippets found on your website. Was that intentional?",
-                "https://plausible.io/docs/script-extensions"}
+                "https://plausible.io/docs/script-extensions"},
+               {"Using a proxy? Read our guide", "https://plausible.io/docs/proxy/introduction"}
              ]
     end
 
@@ -261,7 +265,7 @@ defmodule Plausible.Verification.ChecksTest do
     """
 
     test "detecting snippet after busting cache" do
-      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+      stub_fetch_body(fn conn ->
         conn = fetch_query_params(conn)
 
         if conn.query_params["plausible_verification"] do
@@ -275,7 +279,7 @@ defmodule Plausible.Verification.ChecksTest do
         end
       end)
 
-      Req.Test.stub(Plausible.Verification.Checks.Installation, fn conn ->
+      stub_installation(fn conn ->
         {:ok, body, _} = read_body(conn)
 
         if String.contains?(body, "?plausible_verification") do
@@ -397,7 +401,7 @@ defmodule Plausible.Verification.ChecksTest do
     end
 
     test "disallowed via content-security-policy" do
-      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+      stub_fetch_body(fn conn ->
         conn
         |> put_resp_header("content-security-policy", "default-src 'self' foo.local")
         |> put_resp_content_type("text/html")
@@ -423,7 +427,7 @@ defmodule Plausible.Verification.ChecksTest do
     end
 
     test "allowed via content-security-policy" do
-      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+      stub_fetch_body(fn conn ->
         conn
         |> put_resp_header(
           "content-security-policy",
@@ -493,7 +497,7 @@ defmodule Plausible.Verification.ChecksTest do
     end
 
     test "non-html body" do
-      Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+      stub_fetch_body(fn conn ->
         conn
         |> put_resp_content_type("image/png")
         |> send_resp(200, :binary.copy(<<0>>, 100))
@@ -615,8 +619,16 @@ defmodule Plausible.Verification.ChecksTest do
     )
   end
 
+  defp stub_fetch_body(f) when is_function(f, 1) do
+    Req.Test.stub(Plausible.Verification.Checks.FetchBody, f)
+  end
+
+  defp stub_installation(f) when is_function(f, 1) do
+    Req.Test.stub(Plausible.Verification.Checks.Installation, f)
+  end
+
   defp stub_fetch_body(status, body) do
-    Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+    stub_fetch_body(fn conn ->
       conn
       |> put_resp_content_type("text/html")
       |> send_resp(status, body)
@@ -624,7 +636,7 @@ defmodule Plausible.Verification.ChecksTest do
   end
 
   defp stub_installation(status \\ 200, json \\ plausible_installed()) do
-    Req.Test.stub(Plausible.Verification.Checks.Installation, fn conn ->
+    stub_installation(fn conn ->
       conn
       |> put_resp_content_type("application/json")
       |> send_resp(status, Jason.encode!(json))
