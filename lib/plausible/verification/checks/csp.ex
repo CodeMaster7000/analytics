@@ -12,7 +12,7 @@ defmodule Plausible.Verification.Checks.CSP do
 
         allowed? =
           Enum.any?(directives, fn directive ->
-            String.contains?(directive, "plausible.io")
+            String.contains?(directive, PlausibleWeb.Endpoint.host())
           end)
 
         if allowed? do

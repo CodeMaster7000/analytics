@@ -43,7 +43,7 @@ defmodule Plausible.Verification.Diagnostics do
     %Rating{
       ok?: installed?,
       recommendations: [
-        {"Make sure your Content-Security-Policy allows plausible.io",
+        {"Make sure your Content-Security-Policy allows #{PlausibleWeb.Endpoint.host()}}",
          "https://plausible.io/docs/troubleshoot-integration"}
         | general_recommendations(diag)
       ]

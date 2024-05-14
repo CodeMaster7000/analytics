@@ -21,6 +21,6 @@ defmodule Plausible.Verification.Checks.Snippet do
   defp proxy_likely?(nodes) do
     nodes
     |> Floki.attribute("src")
-    |> Enum.any?(&(not String.starts_with?(&1, "https://plausible.io")))
+    |> Enum.any?(&(not String.starts_with?(&1, PlausibleWeb.Endpoint.url())))
   end
 end

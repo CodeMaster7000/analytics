@@ -10,7 +10,7 @@ defmodule Plausible.Verification.ChecksTest do
   @normal_body """
   <html>
   <head>
-  <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
+  <script defer data-domain="example.com" src="http://localhost:8000/js/script.js"></script>
   </head>
   <body>Hello</body>
   </html>
@@ -190,7 +190,7 @@ defmodule Plausible.Verification.ChecksTest do
     </head>
     <body>
     Hello
-    <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
+    <script defer data-domain="example.com" src="http://localhost:8000/js/script.js"></script>
     </body>
     </html>
     """
@@ -421,7 +421,7 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.errors == []
 
       assert rating.recommendations == [
-               {"Make sure your Content-Security-Policy allows plausible.io",
+               {"Make sure your Content-Security-Policy allows #{PlausibleWeb.Endpoint.host()}}",
                 "https://plausible.io/docs/troubleshoot-integration"}
              ]
     end
@@ -432,8 +432,8 @@ defmodule Plausible.Verification.ChecksTest do
         |> put_resp_header(
           "content-security-policy",
           Enum.random([
-            "default-src 'self'; script-src plausible.io; connect-src plausible.io",
-            "default-src 'self' *.plausible.io"
+            "default-src 'self'; script-src plausible.io; connect-src #{PlausibleWeb.Endpoint.host()}",
+            "default-src 'self' *.#{PlausibleWeb.Endpoint.host()}"
           ])
         )
         |> put_resp_content_type("text/html")
