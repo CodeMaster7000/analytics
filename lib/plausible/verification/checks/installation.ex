@@ -26,7 +26,7 @@ defmodule Plausible.Verification.Checks.Installation do
       retry: :transient,
       retry_log_level: :warning,
       max_retries: 2,
-      receive_timeout: 15_000
+      receive_timeout: 20_000
     ]
 
     extra_opts = Application.get_env(:plausible, __MODULE__)[:req_opts] || []

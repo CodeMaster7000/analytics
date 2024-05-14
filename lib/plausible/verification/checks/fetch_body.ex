@@ -14,7 +14,9 @@ defmodule Plausible.Verification.Checks.FetchBody do
           base_url: url,
           max_redirects: 2,
           connect_options: [timeout: 4_000],
-          receive_timeout: 4_000
+          receive_timeout: 4_000,
+          max_retries: 3,
+          retry_log_level: :warning
         ],
         fetch_body_opts
       )
