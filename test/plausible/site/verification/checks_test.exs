@@ -590,7 +590,7 @@ defmodule Plausible.Verification.ChecksTest do
                ]
     end
 
-    test "callback fails to fire" do
+    test "non-proxied setup, but callback fails to fire" do
       stub_fetch_body(200, @normal_body)
       stub_installation(200, plausible_installed(true, 0))
 
@@ -599,9 +599,9 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.callback_status == 0
 
       rating = State.interpret_diagnostics(result)
-      refute rating.ok?
-      assert rating.errors == ["You're almost there"]
-      assert rating.recommendations == [""]
+      assert rating.ok?
+      assert rating.errors == []
+      assert rating.recommendations == []
     end
   end
 

@@ -21,11 +21,10 @@ defmodule Plausible.Verification.Diagnostics do
 
   @spec rate(t(), String.t()) :: Rating.t()
   def rate(
-        %__MODULE__{proxy_likely?: true, plausible_installed?: true, callback_status: non_202} =
+        %__MODULE__{proxy_likely?: true, plausible_installed?: true, callback_status: 0} =
           diag,
         _url
-      )
-      when non_202 != 202 do
+      ) do
     %Rating{
       ok?: false,
       errors: ["Installation incomplete"],
