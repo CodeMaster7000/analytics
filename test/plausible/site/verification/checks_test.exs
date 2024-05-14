@@ -3,12 +3,14 @@ defmodule Plausible.Verification.ChecksTest do
 
   alias Plausible.Verification.Checks
   alias Plausible.Verification.State
+
   import ExUnit.CaptureLog
+  import Plug.Conn
 
   @normal_body """
   <html>
   <head>
-  <script defer data-domain=\"example.com\" src=\"https://plausible.io/js/plausible.js\"></script>
+  <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
   </head>
   <body>Hello</body>
   </html>
@@ -101,12 +103,12 @@ defmodule Plausible.Verification.ChecksTest do
           send(test, :redirect_sent)
 
           conn
-          |> Plug.Conn.put_resp_header("location", "https://example.com")
-          |> Plug.Conn.send_resp(302, "redirecting to https://example.com")
+          |> put_resp_header("location", "https://example.com")
+          |> send_resp(302, "redirecting to https://example.com")
         else
           conn
-          |> Plug.Conn.put_resp_header("content-type", "text/html")
-          |> Plug.Conn.send_resp(200, @normal_body)
+          |> put_resp_header("content-type", "text/html")
+          |> send_resp(200, @normal_body)
         end
       end)
 
@@ -137,8 +139,8 @@ defmodule Plausible.Verification.ChecksTest do
         send(test, :redirect_sent)
 
         conn
-        |> Plug.Conn.put_resp_header("location", "https://example.com")
-        |> Plug.Conn.send_resp(302, "redirecting to https://example.com")
+        |> put_resp_header("location", "https://example.com")
+        |> send_resp(302, "redirecting to https://example.com")
       end)
 
       stub_installation()
@@ -188,7 +190,7 @@ defmodule Plausible.Verification.ChecksTest do
     </head>
     <body>
     Hello
-    <script defer data-domain=\"example.com\" src=\"https://plausible.io/js/plausible.js\"></script>
+    <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
     </body>
     </html>
     """
@@ -216,13 +218,13 @@ defmodule Plausible.Verification.ChecksTest do
     @many_snippets """
     <html>
     <head>
-    <script defer data-domain=\"example.com\" src=\"https://plausible.io/js/plausible.js\"></script>
-    <script defer data-domain=\"example.com\" src=\"https://plausible.io/js/plausible.js\"></script>
+    <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
+    <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
     </head>
     <body>
     Hello
-    <script defer data-domain=\"example.com\" src=\"https://plausible.io/js/plausible.js\"></script>
-    <script defer data-domain=\"example.com\" src=\"https://plausible.io/js/plausible.js\"></script>
+    <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
+    <script defer data-domain="example.com" src="https://plausible.io/js/script.js"></script>
     </body>
     </html>
     """
@@ -260,26 +262,26 @@ defmodule Plausible.Verification.ChecksTest do
 
     test "detecting snippet after busting cache" do
       Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
-        conn = Plug.Conn.fetch_query_params(conn)
+        conn = fetch_query_params(conn)
 
         if conn.query_params["plausible_verification"] do
           conn
-          |> Plug.Conn.put_resp_content_type("text/html")
-          |> Plug.Conn.send_resp(200, @normal_body)
+          |> put_resp_content_type("text/html")
+          |> send_resp(200, @normal_body)
         else
           conn
-          |> Plug.Conn.put_resp_content_type("text/html")
-          |> Plug.Conn.send_resp(200, @body_no_snippet)
+          |> put_resp_content_type("text/html")
+          |> send_resp(200, @body_no_snippet)
         end
       end)
 
       Req.Test.stub(Plausible.Verification.Checks.Installation, fn conn ->
-        {:ok, body, _} = Plug.Conn.read_body(conn)
+        {:ok, body, _} = read_body(conn)
 
         if String.contains?(body, "?plausible_verification") do
           conn
-          |> Plug.Conn.put_resp_content_type("application/json")
-          |> Plug.Conn.send_resp(200, Jason.encode!(plausible_installed()))
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(plausible_installed()))
         else
           raise "Should not get here even"
         end
@@ -397,9 +399,9 @@ defmodule Plausible.Verification.ChecksTest do
     test "disallowed via content-security-policy" do
       Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
         conn
-        |> Plug.Conn.put_resp_header("content-security-policy", "default-src 'self' foo.local")
-        |> Plug.Conn.put_resp_content_type("text/html")
-        |> Plug.Conn.send_resp(200, @normal_body)
+        |> put_resp_header("content-security-policy", "default-src 'self' foo.local")
+        |> put_resp_content_type("text/html")
+        |> send_resp(200, @normal_body)
       end)
 
       installed? = Enum.random([true, false])
@@ -423,15 +425,15 @@ defmodule Plausible.Verification.ChecksTest do
     test "allowed via content-security-policy" do
       Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
         conn
-        |> Plug.Conn.put_resp_header(
+        |> put_resp_header(
           "content-security-policy",
           Enum.random([
             "default-src 'self'; script-src plausible.io; connect-src plausible.io",
             "default-src 'self' *.plausible.io"
           ])
         )
-        |> Plug.Conn.put_resp_content_type("text/html")
-        |> Plug.Conn.send_resp(200, @normal_body)
+        |> put_resp_content_type("text/html")
+        |> send_resp(200, @normal_body)
       end)
 
       stub_installation()
@@ -493,8 +495,8 @@ defmodule Plausible.Verification.ChecksTest do
     test "non-html body" do
       Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
         conn
-        |> Plug.Conn.put_resp_content_type("image/png")
-        |> Plug.Conn.send_resp(200, :binary.copy(<<0>>, 100))
+        |> put_resp_content_type("image/png")
+        |> send_resp(200, :binary.copy(<<0>>, 100))
       end)
 
       stub_installation(200, plausible_installed(false))
@@ -525,7 +527,7 @@ defmodule Plausible.Verification.ChecksTest do
     @proxied_script_body """
     <html>
     <head>
-    <script defer data-domain=\"example.com\" src=\"https://proxy.example.com/js/script.js\"></script>
+    <script defer data-domain="example.com" src="https://proxy.example.com/js/script.js"></script>
     </head>
     <body>Hello</body>
     </html>
@@ -616,16 +618,16 @@ defmodule Plausible.Verification.ChecksTest do
   defp stub_fetch_body(status, body) do
     Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
       conn
-      |> Plug.Conn.put_resp_content_type("text/html")
-      |> Plug.Conn.send_resp(status, body)
+      |> put_resp_content_type("text/html")
+      |> send_resp(status, body)
     end)
   end
 
   defp stub_installation(status \\ 200, json \\ plausible_installed()) do
     Req.Test.stub(Plausible.Verification.Checks.Installation, fn conn ->
       conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.send_resp(status, Jason.encode!(json))
+      |> put_resp_content_type("application/json")
+      |> send_resp(status, Jason.encode!(json))
     end)
   end
 
