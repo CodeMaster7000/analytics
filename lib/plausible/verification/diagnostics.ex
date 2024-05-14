@@ -8,8 +8,7 @@ defmodule Plausible.Verification.Diagnostics do
             disallowed_via_csp?: false,
             service_error: nil,
             body_fetched?: false,
-            wordpress?: false,
-            url: nil
+            scan_findings: []
 
   @type t :: %__MODULE__{}
 
@@ -29,7 +28,8 @@ defmodule Plausible.Verification.Diagnostics do
     %Rating{
       ok?: installed?,
       recommendations: [
-        "Make sure your Content-Security-Policy allows plausible.io"
+        {"Make sure your Content-Security-Policy allows plausible.io",
+         "https://plausible.io/docs/troubleshoot-integration"}
         | general_recommendations(diag)
       ]
     }
@@ -52,7 +52,8 @@ defmodule Plausible.Verification.Diagnostics do
       errors: ["We could not reach your website. Is it up?"],
       recommendations: [
         "Make sure the website is up and running at #{url}",
-        "Note: you can run the site elsewhere, in which case we can't verify it"
+        {"Note: you can run the site elsewhere, in which case we can't verify it",
+         "https://plausible.io/docs/subdomain-hostname-filter"}
       ]
     }
   end
@@ -85,7 +86,10 @@ defmodule Plausible.Verification.Diagnostics do
     %Rating{
       ok?: false,
       errors: ["We found no snippet installed on your website"],
-      recommendations: ["Hint: Place the snippet on your website and deploy it"]
+      recommendations: [
+        {"Hint: Place the snippet on your website and deploy it",
+         "https://plausible.io/docs/plausible-script"}
+      ]
     }
   end
 
@@ -100,7 +104,7 @@ defmodule Plausible.Verification.Diagnostics do
   def general_recommendations(%D{} = diag) do
     Enum.reduce(
       [
-        &recommend_wordpress_plugin/1,
+        &recommend_gtm_docs/1,
         &recommend_one_snippet/1,
         &recommend_putting_snippet_in_head/1,
         &recommend_busting_cache/1
@@ -118,15 +122,16 @@ defmodule Plausible.Verification.Diagnostics do
     )
   end
 
-  defp recommend_wordpress_plugin(diag) do
-    if diag.wordpress? do
-      {"On WordPress? Use our official plugin", ""}
+  defp recommend_gtm_docs(diag) do
+    if :gtm in diag.scan_findings do
+      {"Using Google Tag Manager?", "https://plausible.io/docs/google-tag-manager"}
     end
   end
 
   defp recommend_one_snippet(diag) do
     if diag.snippets_found_in_body > 1 or diag.snippets_found_in_head > 1 do
-      "Hint: Multiple snippets found on your website. Was that intentional?"
+      {"Hint: Multiple snippets found on your website. Was that intentional?",
+       "https://plausible.io/docs/script-extensions"}
     end
   end
 

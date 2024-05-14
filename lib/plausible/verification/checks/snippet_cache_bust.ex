@@ -5,15 +5,14 @@ defmodule Plausible.Verification.Checks.SnippetCacheBust do
   def friendly_name, do: "Busting cache"
 
   @impl true
-  def perform(%State{diagnostics: %Diagnostics{} = diagnostics} = state)
-      when diagnostics.snippets_found_in_head > 0 or diagnostics.snippets_found_in_body > 0 do
-    state
-  end
-
   def perform(
         %State{
           url: url,
-          diagnostics: %Diagnostics{snippets_found_in_head: 0, snippets_found_in_body: 0}
+          diagnostics: %Diagnostics{
+            snippets_found_in_head: 0,
+            snippets_found_in_body: 0,
+            body_fetched?: true
+          }
         } = state
       ) do
     cache_invalidator = abs(:erlang.unique_integer())
@@ -31,6 +30,8 @@ defmodule Plausible.Verification.Checks.SnippetCacheBust do
       state
     end
   end
+
+  def perform(state), do: state
 
   defp update_url(url, invalidator) do
     url

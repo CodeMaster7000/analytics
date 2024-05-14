@@ -27,7 +27,7 @@ defmodule Plausible.Verification.ChecksTest do
       assert result.diagnostics.body_fetched? == true
       refute result.diagnostics.service_error
       refute result.diagnostics.snippet_found_after_busting_cache?
-      assert result.diagnostics.wordpress? == false
+      assert result.diagnostics.scan_findings == []
 
       rating = State.interpret_diagnostics(result)
       assert rating.ok?
@@ -89,12 +89,12 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.recommendations == []
     end
 
-    test "fetching will follow 1 redirect" do
+    test "fetching will follow 2 redirects" do
       ref = :counters.new(1, [:atomics])
       test = self()
 
       Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
-        if :counters.get(ref, 1) < 1 do
+        if :counters.get(ref, 1) < 2 do
           :counters.add(ref, 1, 1)
           send(test, :redirect_sent)
 
@@ -103,6 +103,7 @@ defmodule Plausible.Verification.ChecksTest do
           |> Plug.Conn.send_resp(302, "redirecting to https://example.com")
         else
           conn
+          |> Plug.Conn.put_resp_header("content-type", "text/html")
           |> Plug.Conn.send_resp(200, @normal_body)
         end
       end)
@@ -111,6 +112,8 @@ defmodule Plausible.Verification.ChecksTest do
 
       result = run_checks()
       assert_receive :redirect_sent
+      assert_receive :redirect_sent
+      refute_receive _
 
       assert result.diagnostics.snippets_found_in_head == 1
       assert result.diagnostics.snippets_found_in_body == 0
@@ -125,8 +128,12 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.recommendations == []
     end
 
-    test "fetching will not follow more than 1 redirect" do
+    test "fetching will not follow more than 2 redirect" do
+      test = self()
+
       Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
+        send(test, :redirect_sent)
+
         conn
         |> Plug.Conn.put_resp_header("location", "https://example.com")
         |> Plug.Conn.send_resp(302, "redirecting to https://example.com")
@@ -135,6 +142,11 @@ defmodule Plausible.Verification.ChecksTest do
       stub_installation()
 
       result = run_checks()
+
+      assert_receive :redirect_sent
+      assert_receive :redirect_sent
+      assert_receive :redirect_sent
+      refute_receive _
 
       assert result.diagnostics.snippets_found_in_head == 0
       assert result.diagnostics.snippets_found_in_body == 0
@@ -192,7 +204,11 @@ defmodule Plausible.Verification.ChecksTest do
       rating = State.interpret_diagnostics(result)
       assert rating.ok?
       assert rating.errors == []
-      assert rating.recommendations == ["Hint: Place the snippet in <head> rather than <body>"]
+
+      assert rating.recommendations ==
+               [
+                 "Hint: Place the snippet in <head> rather than <body>"
+               ]
     end
 
     @many_snippets """
@@ -225,7 +241,8 @@ defmodule Plausible.Verification.ChecksTest do
 
       assert rating.recommendations == [
                "Hint: Place the snippet in <head> rather than <body>",
-               "Hint: Multiple snippets found on your website. Was that intentional?"
+               {"Hint: Multiple snippets found on your website. Was that intentional?",
+                "https://plausible.io/docs/script-extensions"}
              ]
     end
 
@@ -244,9 +261,13 @@ defmodule Plausible.Verification.ChecksTest do
         conn = Plug.Conn.fetch_query_params(conn)
 
         if conn.query_params["plausible_verification"] do
-          Plug.Conn.send_resp(conn, 200, @normal_body)
+          conn
+          |> Plug.Conn.put_resp_content_type("text/html")
+          |> Plug.Conn.send_resp(200, @normal_body)
         else
-          Plug.Conn.send_resp(conn, 200, @body_no_snippet)
+          conn
+          |> Plug.Conn.put_resp_content_type("text/html")
+          |> Plug.Conn.send_resp(200, @body_no_snippet)
         end
       end)
 
@@ -273,7 +294,7 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.errors == []
 
       assert rating.recommendations == [
-               "Hint: Purge your site's cache to ensure you're viewing the lastes version of your website"
+               "Hint: Purge your site's cache to ensure you're viewing the latest version of your website"
              ]
     end
 
@@ -291,7 +312,11 @@ defmodule Plausible.Verification.ChecksTest do
 
       refute rating.ok?
       assert rating.errors == ["We found no snippet installed on your website"]
-      assert rating.recommendations == ["Hint: Place the snippet on your website and deploy it"]
+
+      assert rating.recommendations == [
+               {"Hint: Place the snippet on your website and deploy it",
+                "https://plausible.io/docs/plausible-script"}
+             ]
     end
 
     test "a check that raises" do
@@ -388,7 +413,8 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.errors == []
 
       assert rating.recommendations == [
-               "Make sure your Content-Security-Policy allows plausible.io"
+               {"Make sure your Content-Security-Policy allows plausible.io",
+                "https://plausible.io/docs/troubleshoot-integration"}
              ]
     end
 
@@ -426,7 +452,7 @@ defmodule Plausible.Verification.ChecksTest do
 
       assert_receive {:verification_check_start, {Checks.FetchBody, %State{}}}
       assert_receive {:verification_check_start, {Checks.CSP, %State{}}}
-      assert_receive {:verification_check_start, {Checks.DetectApp, %State{}}}
+      assert_receive {:verification_check_start, {Checks.ScanBody, %State{}}}
       assert_receive {:verification_check_start, {Checks.Snippet, %State{}}}
       assert_receive {:verification_check_start, {Checks.SnippetCacheBust, %State{}}}
       assert_receive {:verification_check_start, {Checks.Installation, %State{}}}
@@ -434,56 +460,68 @@ defmodule Plausible.Verification.ChecksTest do
       refute_receive _
     end
 
-    @wordpress_in_body """
+    @gtm_body """
     <html>
     <head>
-    <meta generator="WordPress"/>
     </head>
     <body>
     Hello
+     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-XXXX" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     </body>
     </html>
     """
 
-    test "detecting wordpress via body" do
-      stub_fetch_body(200, @wordpress_in_body)
+    test "detecting gtm" do
+      stub_fetch_body(200, @gtm_body)
       stub_installation()
 
       result = run_checks()
 
-      assert result.diagnostics.wordpress? == true
+      assert result.diagnostics.scan_findings == [:gtm]
 
       rating = State.interpret_diagnostics(result)
       assert rating.ok?
       assert rating.errors == []
-      assert rating.recommendations == ["On WordPress? Use our official plugin"]
+
+      assert rating.recommendations == [
+               {"Using Google Tag Manager?", "https://plausible.io/docs/google-tag-manager"}
+             ]
     end
 
-    test "detecting wordpress via headers" do
+    test "non-html body" do
       Req.Test.stub(Plausible.Verification.Checks.FetchBody, fn conn ->
         conn
-        |> Plug.Conn.put_resp_header(
-          Enum.random(["server", "x-powered-by"]),
-          "Something WordPress Something"
-        )
-        |> Plug.Conn.put_resp_content_type("text/html")
-        |> Plug.Conn.send_resp(200, @normal_body)
+        |> Plug.Conn.put_resp_content_type("image/png")
+        |> Plug.Conn.send_resp(200, :binary.copy(<<0>>, 100))
       end)
 
-      stub_installation()
+      stub_installation(200, plausible_installed(false))
 
       result = run_checks()
 
-      assert result.diagnostics.wordpress? == true
+      assert result.assigns == %{}
+      assert result.diagnostics.snippets_found_in_head == 0
+      assert result.diagnostics.snippets_found_in_body == 0
+      assert result.diagnostics.plausible_installed? == false
+      assert result.diagnostics.snippet_found_after_busting_cache? == false
+      assert result.diagnostics.disallowed_via_csp? == false
+      assert result.diagnostics.service_error == nil
+      assert result.diagnostics.body_fetched? == false
+      assert result.diagnostics.scan_findings == []
 
       rating = State.interpret_diagnostics(result)
-      assert rating.ok?
-      assert rating.errors == []
-      assert rating.recommendations == ["On WordPress? Use our official plugin"]
+      refute rating.ok?
+      assert rating.errors == ["We could not reach your website. Is it up?"]
+
+      assert rating.recommendations == [
+               "Make sure the website is up and running at https://example.com",
+               {"Note: you can run the site elsewhere, in which case we can't verify it",
+                "https://plausible.io/docs/subdomain-hostname-filter"}
+             ]
     end
   end
 
-  def run_checks(extra_opts \\ []) do
+  defp run_checks(extra_opts \\ []) do
     Checks.run(
       "https://example.com",
       "example.com",

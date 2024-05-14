@@ -25,7 +25,8 @@ defmodule Plausible.Verification.Checks.Installation do
       body: verify_plausible_installed_js_code(url, Plausible.Verification.user_agent()),
       retry: :transient,
       retry_log_level: :warning,
-      max_retries: 3
+      max_retries: 3,
+      receive_timeout: 15_000
     ]
 
     extra_opts = Application.get_env(:plausible, __MODULE__)[:req_opts] || []

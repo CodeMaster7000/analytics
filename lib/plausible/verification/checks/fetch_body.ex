@@ -12,7 +12,9 @@ defmodule Plausible.Verification.Checks.FetchBody do
       Keyword.merge(
         [
           base_url: url,
-          max_redirects: 1
+          max_redirects: 2,
+          connect_options: [timeout: 4_000],
+          receive_timeout: 4_000
         ],
         fetch_body_opts
       )
@@ -24,23 +26,33 @@ defmodule Plausible.Verification.Checks.FetchBody do
       when is_binary(body) and status in 200..299 ->
         extract_document(state, response)
 
-      {:ok, _response} ->
-        put_diagnostics(state, body_fetched?: false)
-
-      {:error, _exception} ->
-        put_diagnostics(state, body_fetched?: false)
-    end
-  end
-
-  defp extract_document(state, response) do
-    case Floki.parse_document(response.body) do
-      {:ok, document} ->
+      _ ->
         state
-        |> assign(raw_body: response.body, document: document, headers: response.headers)
-        |> put_diagnostics(body_fetched?: true)
-
-      {:error, _reason} ->
-        put_diagnostics(state, body_fetched?: false)
     end
   end
+
+  defp extract_document(state, response) when byte_size(response.body) <= 500_000 do
+    with true <- html?(response),
+          {:ok, document} <- Floki.parse_document(response.body) do
+      state
+      |> assign(raw_body: response.body, document: document, headers: response.headers)
+      |> put_diagnostics(body_fetched?: true)
+    else _ -> 
+        state
+    end
+  end
+
+  defp extract_document(state, response) when byte_size(response.body) > 500_000 do
+    state
+  end
+
+  defp html?(%{headers: headers}) do
+    headers
+    |> Map.get("content-type", "")
+    |> List.wrap()
+    |> List.first()
+    |> String.contains?("text/html")
+  end
+
+  defp html?(_), do: false
 end
