@@ -25,7 +25,7 @@ defmodule Plausible.Verification.Checks.Installation do
       body: verify_plausible_installed_js_code(url, Plausible.Verification.user_agent()),
       retry: :transient,
       retry_log_level: :warning,
-      max_retries: 3,
+      max_retries: 2,
       receive_timeout: 15_000
     ]
 

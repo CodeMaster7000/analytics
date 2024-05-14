@@ -165,7 +165,7 @@ defmodule Plausible.Verification.ChecksTest do
       assert rating.recommendations == []
     end
 
-    test "fetching body fails at non-2xx status" do
+    test "fetching body fails at non-2xx status, but installation is ok" do
       stub_fetch_body(599, "boo")
       stub_installation()
 
